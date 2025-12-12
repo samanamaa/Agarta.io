@@ -78,7 +78,6 @@ def handle_client(sock, addr):
 
                     print(f"{pid} connected")
 
-                    # --- SEND WELCOME ---
                     welcome_msg = json.dumps({
                         "type": "welcome",
                         "id": pid,
@@ -113,7 +112,6 @@ def game_loop():
 
         last = now
 
-        # --- MOVE PLAYERS ---
         for p in players.values():
             dx = p["tx"] - p["x"]
             dy = p["ty"] - p["y"]
@@ -127,7 +125,6 @@ def game_loop():
                 p["x"] = max(0, min(WORLD_W, p["x"]))
                 p["y"] = max(0, min(WORLD_H, p["y"]))
 
-        # --- FOOD COLLISIONS ---
         eaten = []
         for f in foods:
             for p in players.values():
@@ -146,7 +143,6 @@ def game_loop():
                 "mass": 1
             })
 
-        # --- SEND STATE ---
         state_msg = json.dumps({
             "type": "state",
             "players": list(players.values()),

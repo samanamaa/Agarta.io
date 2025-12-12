@@ -1,19 +1,47 @@
 import pygame
 from client import NetworkClient
 import math
+from start_screen import start_screen
 
-SCREEN_W, SCREEN_H = 1000, 700
 
 def radius(m):
     return int(math.sqrt(m) * 3) + 4
 
 
-def main():
-    name = input("Zadajte meno hráča: ")
-    ip = input("IP servera: ")
+def show_error(message):
+    pygame.init()
+    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    screen_w, screen_h = screen.get_size()
+    clock = pygame.time.Clock()
+    font = pygame.font.SysFont(None, 36)
+    timer = 0
+    while timer < 1.8:
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                return False
+        screen.fill((40, 30, 30))
+        text = font.render(message, True, (230, 100, 100))
+        screen.blit(
+            text,
+            (screen_w // 2 - text.get_width() // 2, screen_h // 2 - text.get_height() // 2),
+        )
+        pygame.display.flip()
+        timer += clock.tick(60) / 1000
+    return True
 
-    net = NetworkClient(ip, name)
-    net.connect()
+
+def main():
+    while True:
+        name, ip = start_screen()
+        if not name or not ip:
+            return
+        net = NetworkClient(ip, name)
+        try:
+            net.connect()
+            break
+        except Exception:
+            if not show_error("Nepodarilo sa pripojiť k serveru"):
+                return
 
     state = {"players": [], "foods": []}
     my_id = None
@@ -27,8 +55,8 @@ def main():
 
     net.state_callback = update_state
 
-    pygame.init()
-    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H))
+    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    screen_w, screen_h = screen.get_size()
     clock = pygame.time.Clock()
 
     cam_x, cam_y = 0, 0
@@ -41,39 +69,35 @@ def main():
             if e.type == pygame.QUIT:
                 running = False
 
-        # find me
         me = None
         for p in state["players"]:
             if p["id"] == my_id:
                 me = p
                 break
 
-        # move camera
         if me:
             cam_x = me["x"]
             cam_y = me["y"]
 
         mx, my = pygame.mouse.get_pos()
-        world_mx = mx + cam_x - SCREEN_W/2
-        world_my = my + cam_y - SCREEN_H/2
+        world_mx = mx + cam_x - screen_w / 2
+        world_my = my + cam_y - screen_h / 2
 
         net.send_input(world_mx, world_my)
 
-        screen.fill((220,220,230))
+        screen.fill((220, 220, 230))
 
-        # foods
         for f in state["foods"]:
-            sx = int(f["x"] - cam_x + SCREEN_W/2)
-            sy = int(f["y"] - cam_y + SCREEN_H/2)
-            pygame.draw.circle(screen, (120,200,120), (sx,sy), 3)
+            sx = int(f["x"] - cam_x + screen_w / 2)
+            sy = int(f["y"] - cam_y + screen_h / 2)
+            pygame.draw.circle(screen, (120, 200, 120), (sx, sy), 3)
 
-        # players
         for p in state["players"]:
-            sx = int(p["x"] - cam_x + SCREEN_W/2)
-            sy = int(p["y"] - cam_y + SCREEN_H/2)
+            sx = int(p["x"] - cam_x + screen_w / 2)
+            sy = int(p["y"] - cam_y + screen_h / 2)
             r = radius(p["mass"])
-            color = (80,160,255) if p["id"] == my_id else (200,100,100)
-            pygame.draw.circle(screen, color, (sx,sy), r)
+            color = (80, 160, 255) if p["id"] == my_id else (200, 100, 100)
+            pygame.draw.circle(screen, color, (sx, sy), r)
 
         pygame.display.flip()
 
