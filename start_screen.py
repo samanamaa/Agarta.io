@@ -10,7 +10,7 @@ def start_screen():
     big_font = pygame.font.SysFont(None, 54)
 
     name = ""
-    ip = "127.0.0.1"
+    ip = "192.168.1.0"
     active = "name"
 
     while True:
@@ -20,7 +20,6 @@ def start_screen():
         prompt = font.render("Zadaj meno a IP servera", True, (200, 200, 210))
         name_label = font.render("Meno:", True, (220, 220, 230))
         ip_label = font.render("IP:", True, (220, 220, 230))
-        hint = font.render("Klikni do poľa, Enter = štart", True, (170, 175, 190))
 
         button_rect = pygame.Rect(screen_w // 2 - 80, screen_h // 2 + 80, 160, 50)
         name_rect = pygame.Rect(screen_w // 2 - 80, screen_h // 2 - 45, 260, 40)
@@ -98,7 +97,6 @@ def start_screen():
             ),
         )
 
-        screen.blit(hint, (screen_w // 2 - hint.get_width() // 2, button_rect.bottom + 12))
 
         pygame.display.flip()
 

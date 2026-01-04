@@ -7,11 +7,12 @@ import random
 
 WORLD_W, WORLD_H = 2000, 1400
 TICK_RATE = 60
-NUM_FOOD = 150
+NUM_FOOD = 200
 
 players = {}
 foods = []
 client_sockets = []
+SPLIT_COOLDOWN = 15
 
 
 def mass_to_radius(m):
@@ -69,11 +70,14 @@ def handle_client(sock, addr):
                     players[pid] = {
                         "id": pid,
                         "name": msg["name"],
-                        "x": random.uniform(0, WORLD_W),
-                        "y": random.uniform(0, WORLD_H),
-                        "mass": 16,
-                        "tx": 0,
-                        "ty": 0
+                        "cells": [{
+                            "x": random.uniform(0, WORLD_W),
+                            "y": random.uniform(0, WORLD_H),
+                            "mass": 16,
+                            "tx": 0,
+                            "ty": 0,
+                            "split_time": 0
+                        }]
                     }
 
                     print(f"{pid} connected")
@@ -87,8 +91,37 @@ def handle_client(sock, addr):
                     sock.sendall(welcome_msg.encode("utf-8"))
 
                 elif msg["type"] == "input" and pid in players:
-                    players[pid]["tx"] = msg["tx"]
-                    players[pid]["ty"] = msg["ty"]
+                    player = players[pid]
+                    for cell in player["cells"]:
+                        cell["tx"] = msg["tx"]
+                        cell["ty"] = msg["ty"]
+                
+                elif msg["type"] == "split" and pid in players:
+                    player = players[pid]
+                    if len(player["cells"]) < 16:
+                        main_cell = player["cells"][0]
+                        if main_cell["mass"] >= 35:
+                            dx = main_cell["tx"] - main_cell["x"]
+                            dy = main_cell["ty"] - main_cell["y"]
+                            d = math.hypot(dx, dy)
+                            if d > 0:
+                                new_mass = main_cell["mass"] // 2
+                                main_cell["mass"] = new_mass
+                                
+                                split_dist = mass_to_radius(new_mass) * 2.5
+                                new_cell = {
+                                    "x": main_cell["x"] + (dx / d) * split_dist,
+                                    "y": main_cell["y"] + (dy / d) * split_dist,
+                                    "mass": new_mass,
+                                    "tx": main_cell["tx"],
+                                    "ty": main_cell["ty"],
+                                    "split_time": time.time()
+                                }
+                                new_cell["x"] = max(0, min(WORLD_W, new_cell["x"]))
+                                new_cell["y"] = max(0, min(WORLD_H, new_cell["y"]))
+                                
+                                player["cells"].insert(0, new_cell)
+                                main_cell["split_time"] = time.time()
 
     except:
         pass
@@ -112,29 +145,84 @@ def game_loop():
 
         last = now
 
+        current_time = time.time()
+        
         for p in players.values():
-            dx = p["tx"] - p["x"]
-            dy = p["ty"] - p["y"]
-            d = math.hypot(dx, dy)
+            for cell in p["cells"]:
+                dx = cell["tx"] - cell["x"]
+                dy = cell["ty"] - cell["y"]
+                d = math.hypot(dx, dy)
 
-            if d > 1:
-                speed = 350 / (1 + mass_to_radius(p["mass"]) / 25)
-                p["x"] += (dx / d) * speed * dt
-                p["y"] += (dy / d) * speed * dt
+                if d > 1:
+                    speed = 350 / (1 + mass_to_radius(cell["mass"]) / 25)
+                    if cell["split_time"] > 0 and current_time - cell["split_time"] < SPLIT_COOLDOWN:
+                        speed *= 1.3
+                    cell["x"] += (dx / d) * speed * dt
+                    cell["y"] += (dy / d) * speed * dt
 
-                p["x"] = max(0, min(WORLD_W, p["x"]))
-                p["y"] = max(0, min(WORLD_H, p["y"]))
+                    cell["x"] = max(0, min(WORLD_W, cell["x"]))
+                    cell["y"] = max(0, min(WORLD_H, cell["y"]))
+            
+            if len(p["cells"]) > 1:
+                merged = []
+                for i, cell1 in enumerate(p["cells"]):
+                    if i in merged:
+                        continue
+                    for j, cell2 in enumerate(p["cells"][i+1:], i+1):
+                        if j in merged:
+                            continue
+                        if current_time - cell1["split_time"] > SPLIT_COOLDOWN and \
+                           current_time - cell2["split_time"] > SPLIT_COOLDOWN:
+                            dist_cells = dist((cell1["x"], cell1["y"]), (cell2["x"], cell2["y"]))
+                            if dist_cells < mass_to_radius(cell1["mass"]) + mass_to_radius(cell2["mass"]):
+                                cell1["mass"] += cell2["mass"]
+                                merged.append(j)
+                
+                p["cells"] = [c for i, c in enumerate(p["cells"]) if i not in merged]
 
         eaten = []
         for f in foods:
             for p in players.values():
-                if dist((p["x"], p["y"]), (f["x"], f["y"])) < mass_to_radius(p["mass"]) + 3:
-                    p["mass"] += 1
-                    eaten.append(f)
+                for cell in p["cells"]:
+                    if dist((cell["x"], cell["y"]), (f["x"], f["y"])) < mass_to_radius(cell["mass"]) + 3:
+                        cell["mass"] += 1
+                        eaten.append(f)
+                        break
+                if f in eaten:
                     break
 
         for f in eaten:
             foods.remove(f)
+
+        cells_to_remove = {}
+        
+        for pid1, p1 in list(players.items()):
+            for cell1 in p1["cells"]:
+                for pid2, p2 in list(players.items()):
+                    if pid1 == pid2:
+                        continue
+                    for j, cell2 in enumerate(p2["cells"]):
+                        if pid2 in cells_to_remove and j in cells_to_remove[pid2]:
+                            continue
+                        if cell1["mass"] > cell2["mass"] * 1.25:
+                            cell_dist = dist((cell1["x"], cell1["y"]), (cell2["x"], cell2["y"]))
+                            r1 = mass_to_radius(cell1["mass"])
+                            r2 = mass_to_radius(cell2["mass"])
+                            if cell_dist < r1 - r2 * 0.5:
+                                cell1["mass"] += cell2["mass"]
+                                if pid2 not in cells_to_remove:
+                                    cells_to_remove[pid2] = []
+                                cells_to_remove[pid2].append(j)
+
+        for pid, indices in cells_to_remove.items():
+            if pid in players:
+                for idx in sorted(indices, reverse=True):
+                    if idx < len(players[pid]["cells"]):
+                        players[pid]["cells"].pop(idx)
+        
+        players_to_remove = [pid for pid, p in players.items() if len(p["cells"]) == 0]
+        for pid in players_to_remove:
+            del players[pid]
 
         while len(foods) < NUM_FOOD:
             foods.append({
@@ -143,9 +231,22 @@ def game_loop():
                 "mass": 1
             })
 
+        player_list = []
+        for pid, p in players.items():
+            total_mass = sum(c["mass"] for c in p["cells"])
+            for cell in p["cells"]:
+                player_list.append({
+                    "id": pid,
+                    "name": p["name"],
+                    "x": cell["x"],
+                    "y": cell["y"],
+                    "mass": cell["mass"],
+                    "total_mass": total_mass
+                })
+        
         state_msg = json.dumps({
             "type": "state",
-            "players": list(players.values()),
+            "players": player_list,
             "foods": foods
         })
 

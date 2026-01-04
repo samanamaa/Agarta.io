@@ -40,3 +40,10 @@ class NetworkClient:
             self.sock.sendall(msg.encode("utf-8"))
         except:
             pass
+    
+    def send_split(self):
+        msg = json.dumps({"type": "split"}) + "\n"
+        try:
+            self.sock.sendall(msg.encode("utf-8"))
+        except:
+            pass
