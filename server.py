@@ -7,12 +7,15 @@ import random
 
 WORLD_W, WORLD_H = 2000, 1400
 TICK_RATE = 60
-NUM_FOOD = 200
+NUM_FOOD = 150
 
 players = {}
 foods = []
+viruses = []
 client_sockets = []
 SPLIT_COOLDOWN = 15
+VIRUS_MASS = 100
+NUM_VIRUSES = 10
 
 
 def mass_to_radius(m):
@@ -35,6 +38,17 @@ def spawn_food():
 
 spawn_food()
 
+def spawn_viruses():
+    global viruses
+    viruses.clear()
+    for _ in range(NUM_VIRUSES):
+        viruses.append({
+            "x": random.uniform(100, WORLD_W - 100),
+            "y": random.uniform(100, WORLD_H - 100),
+            "mass": VIRUS_MASS
+        })
+
+spawn_viruses()
 
 def broadcast(msg):
     msg = msg + "\n"
@@ -134,7 +148,10 @@ def handle_client(sock, addr):
 
 
 def game_loop():
+    global foods
     last = time.time()
+    last_broadcast = 0.0
+    broadcast_interval = 1.0 / 60.0
 
     while True:
         now = time.time()
@@ -144,8 +161,7 @@ def game_loop():
             continue
 
         last = now
-
-        current_time = time.time()
+        current_time = now
         
         for p in players.values():
             for cell in p["cells"]:
@@ -180,45 +196,79 @@ def game_loop():
                 
                 p["cells"] = [c for i, c in enumerate(p["cells"]) if i not in merged]
 
-        eaten = []
-        for f in foods:
-            for p in players.values():
-                for cell in p["cells"]:
-                    if dist((cell["x"], cell["y"]), (f["x"], f["y"])) < mass_to_radius(cell["mass"]) + 3:
-                        cell["mass"] += 1
-                        eaten.append(f)
-                        break
-                if f in eaten:
-                    break
+        eaten = set()
+        for p in players.values():
+            for cell in p["cells"]:
+                cell_r = mass_to_radius(cell["mass"])
+                check_r = cell_r + 3
+                for i, f in enumerate(foods):
+                    if i in eaten:
+                        continue
+                    if abs(cell["x"] - f["x"]) < check_r and abs(cell["y"] - f["y"]) < check_r:
+                        if dist((cell["x"], cell["y"]), (f["x"], f["y"])) < check_r:
+                            cell["mass"] += 1
+                            eaten.add(i)
+                            break
 
-        for f in eaten:
-            foods.remove(f)
+        foods = [f for i, f in enumerate(foods) if i not in eaten]
 
         cells_to_remove = {}
         
-        for pid1, p1 in list(players.items()):
+        players_list = list(players.items())
+        for i, (pid1, p1) in enumerate(players_list):
             for cell1 in p1["cells"]:
-                for pid2, p2 in list(players.items()):
+                r1 = mass_to_radius(cell1["mass"])
+                for pid2, p2 in players_list[i+1:]:
                     if pid1 == pid2:
                         continue
                     for j, cell2 in enumerate(p2["cells"]):
                         if pid2 in cells_to_remove and j in cells_to_remove[pid2]:
                             continue
                         if cell1["mass"] > cell2["mass"] * 1.25:
-                            cell_dist = dist((cell1["x"], cell1["y"]), (cell2["x"], cell2["y"]))
-                            r1 = mass_to_radius(cell1["mass"])
-                            r2 = mass_to_radius(cell2["mass"])
-                            if cell_dist < r1 - r2 * 0.5:
-                                cell1["mass"] += cell2["mass"]
-                                if pid2 not in cells_to_remove:
-                                    cells_to_remove[pid2] = []
-                                cells_to_remove[pid2].append(j)
+                            if abs(cell1["x"] - cell2["x"]) < r1 and abs(cell1["y"] - cell2["y"]) < r1:
+                                cell_dist = dist((cell1["x"], cell1["y"]), (cell2["x"], cell2["y"]))
+                                r2 = mass_to_radius(cell2["mass"])
+                                if cell_dist < r1 - r2 * 0.5:
+                                    cell1["mass"] += cell2["mass"]
+                                    if pid2 not in cells_to_remove:
+                                        cells_to_remove[pid2] = []
+                                    cells_to_remove[pid2].append(j)
 
         for pid, indices in cells_to_remove.items():
             if pid in players:
                 for idx in sorted(indices, reverse=True):
                     if idx < len(players[pid]["cells"]):
                         players[pid]["cells"].pop(idx)
+        
+        for p in players.values():
+            for cell in p["cells"]:
+                cell_r = mass_to_radius(cell["mass"])
+                for virus in viruses:
+                    virus_r = mass_to_radius(virus["mass"])
+                    if abs(cell["x"] - virus["x"]) < cell_r + virus_r and abs(cell["y"] - virus["y"]) < cell_r + virus_r:
+                        cell_dist = dist((cell["x"], cell["y"]), (virus["x"], virus["y"]))
+                        if cell_dist < cell_r + virus_r:
+                            if cell["mass"] >= 35:
+                                num_splits = min(2, cell["mass"] // 35)
+                                new_mass = cell["mass"] // (num_splits + 1)
+                                cell["mass"] = new_mass
+                                
+                                for _ in range(num_splits):
+                                    angle = random.uniform(0, 2 * math.pi)
+                                    split_dist = mass_to_radius(new_mass) * 3
+                                    new_cell = {
+                                        "x": cell["x"] + math.cos(angle) * split_dist,
+                                        "y": cell["y"] + math.sin(angle) * split_dist,
+                                        "mass": new_mass,
+                                        "tx": cell["tx"],
+                                        "ty": cell["ty"],
+                                        "split_time": current_time
+                                    }
+                                    new_cell["x"] = max(0, min(WORLD_W, new_cell["x"]))
+                                    new_cell["y"] = max(0, min(WORLD_H, new_cell["y"]))
+                                    p["cells"].append(new_cell)
+                                cell["split_time"] = current_time
+                                break
         
         players_to_remove = [pid for pid, p in players.items() if len(p["cells"]) == 0]
         for pid in players_to_remove:
@@ -231,26 +281,51 @@ def game_loop():
                 "mass": 1
             })
 
-        player_list = []
-        for pid, p in players.items():
-            total_mass = sum(c["mass"] for c in p["cells"])
-            for cell in p["cells"]:
-                player_list.append({
-                    "id": pid,
-                    "name": p["name"],
-                    "x": cell["x"],
-                    "y": cell["y"],
-                    "mass": cell["mass"],
-                    "total_mass": total_mass
-                })
-        
-        state_msg = json.dumps({
-            "type": "state",
-            "players": player_list,
-            "foods": foods
-        })
+        if current_time - last_broadcast >= broadcast_interval:
+            player_list = []
+            for pid, p in players.items():
+                total_mass = sum(c["mass"] for c in p["cells"])
+                for cell in p["cells"]:
+                    player_list.append({
+                        "id": pid,
+                        "name": p["name"],
+                        "x": cell["x"],
+                        "y": cell["y"],
+                        "mass": cell["mass"],
+                        "total_mass": total_mass
+                    })
+            
+            state_msg = json.dumps({
+                "type": "state",
+                "players": player_list,
+                "foods": foods,
+                "viruses": viruses
+            })
 
-        broadcast(state_msg)
+            broadcast(state_msg)
+            last_broadcast = current_time
+
+
+def discovery_listener():
+    discovery_port = 5679
+    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    udp_sock.bind(("", discovery_port))
+    
+    while True:
+        try:
+            data, addr = udp_sock.recvfrom(1024)
+            if data.decode("utf-8") == "AGARTA_DISCOVERY":
+                host = socket.gethostbyname(socket.gethostname())
+                response = json.dumps({
+                    "type": "server_info",
+                    "ip": host,
+                    "port": 5678,
+                    "players": len(players)
+                })
+                udp_sock.sendto(response.encode("utf-8"), addr)
+        except:
+            pass
 
 
 def start_server():
@@ -263,6 +338,7 @@ def start_server():
     server.listen()
 
     threading.Thread(target=game_loop, daemon=True).start()
+    threading.Thread(target=discovery_listener, daemon=True).start()
 
     while True:
         sock, addr = server.accept()

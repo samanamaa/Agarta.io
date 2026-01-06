@@ -1,6 +1,42 @@
 import socket
 import threading
 import json
+import time
+
+def discover_servers(timeout=2.0):
+    servers = []
+    seen_ips = set()
+    discovery_port = 5679
+    
+    udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    udp_sock.settimeout(0.1)
+    
+    broadcast_msg = "AGARTA_DISCOVERY"
+    udp_sock.sendto(broadcast_msg.encode("utf-8"), ("255.255.255.255", discovery_port))
+    
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            data, addr = udp_sock.recvfrom(1024)
+            msg = json.loads(data.decode("utf-8"))
+            if msg.get("type") == "server_info":
+                server_ip = msg.get("ip", addr[0])
+                if server_ip not in seen_ips:
+                    seen_ips.add(server_ip)
+                    servers.append({
+                        "ip": server_ip,
+                        "port": msg.get("port", 5678),
+                        "players": msg.get("players", 0)
+                    })
+        except socket.timeout:
+            continue
+        except:
+            continue
+    
+    udp_sock.close()
+    return servers
+
 
 class NetworkClient:
     def __init__(self, server_ip, name):
