@@ -306,20 +306,20 @@ def game_loop():
             last_broadcast = current_time
 
 
-def discovery_listener():
+def discovery_listener(host_ip):
     discovery_port = 5679
     udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     udp_sock.bind(("", discovery_port))
     
     while True:
         try:
             data, addr = udp_sock.recvfrom(1024)
             if data.decode("utf-8") == "AGARTA_DISCOVERY":
-                host = socket.gethostbyname(socket.gethostname())
                 response = json.dumps({
                     "type": "server_info",
-                    "ip": host,
+                    "ip": host_ip,
                     "port": 5678,
                     "players": len(players)
                 })
@@ -330,15 +330,16 @@ def discovery_listener():
 
 def start_server():
     host = socket.gethostbyname(socket.gethostname())
+    bind_ip = "0.0.0.0"
     port = 5678
     print(f"Server running at {host}:{port}")
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind((host, port))
+    server.bind((bind_ip, port))
     server.listen()
 
     threading.Thread(target=game_loop, daemon=True).start()
-    threading.Thread(target=discovery_listener, daemon=True).start()
+    threading.Thread(target=discovery_listener, args=(host,), daemon=True).start()
 
     while True:
         sock, addr = server.accept()

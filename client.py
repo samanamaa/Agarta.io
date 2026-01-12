@@ -13,6 +13,15 @@ def discover_servers(timeout=2.0):
     udp_sock.settimeout(0.1)
     
     broadcast_msg = "AGARTA_DISCOVERY"
+    # pokus o broadcast na lokálnu podsieť aj na 255.255.255.255
+    local_ip = socket.gethostbyname(socket.gethostname())
+    try:
+        parts = local_ip.split(".")
+        if len(parts) == 4:
+            subnet_broadcast = ".".join(parts[:3] + ["255"])
+            udp_sock.sendto(broadcast_msg.encode("utf-8"), (subnet_broadcast, discovery_port))
+    except:
+        pass
     udp_sock.sendto(broadcast_msg.encode("utf-8"), ("255.255.255.255", discovery_port))
     
     start_time = time.time()
