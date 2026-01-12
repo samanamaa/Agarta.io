@@ -177,4 +177,3 @@ def start_screen():
         )
 
         pygame.display.flip()
-

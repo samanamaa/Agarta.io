@@ -5,9 +5,9 @@ import time
 import math
 import random
 
-WORLD_W, WORLD_H = 2000, 1400
+WORLD_W, WORLD_H = 4000, 4000
 TICK_RATE = 60
-NUM_FOOD = 150
+NUM_FOOD = 500
 
 players = {}
 foods = []
@@ -15,7 +15,7 @@ viruses = []
 client_sockets = []
 SPLIT_COOLDOWN = 15
 VIRUS_MASS = 100
-NUM_VIRUSES = 10
+NUM_VIRUSES = 30
 
 
 def mass_to_radius(m):

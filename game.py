@@ -129,6 +129,11 @@ def main():
         me = main_cells.get(my_id)
         prev_player_dict = {p["id"]: p for p in prev_state.get("players", [])}
 
+        if my_id is not None and not waiting_for_player and my_id not in player_groups:
+            pygame.quit()
+            main()
+            return
+
         if me:
             prev_me = prev_player_dict.get(my_id)
             if prev_me and alpha < 1.0:
