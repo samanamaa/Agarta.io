@@ -2,6 +2,7 @@ import pygame
 from client import discover_servers
 import threading
 
+
 def start_screen():
     pygame.init()
     screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
@@ -10,6 +11,8 @@ def start_screen():
     font = pygame.font.SysFont(None, 32)
     small_font = pygame.font.SysFont(None, 24)
     big_font = pygame.font.SysFont(None, 54)
+    bg_image = pygame.image.load("assets/background.jpg").convert()
+    bg_image = pygame.transform.smoothscale(bg_image, (screen_w, screen_h))
 
     name = ""
     manual_ip = ""
@@ -31,19 +34,20 @@ def start_screen():
         clock.tick(60)
         current_time = pygame.time.get_ticks() / 1000.0
 
-        title = big_font.render("Agarta.io", True, (230, 230, 240))
-        name_label = font.render("Meno:", True, (220, 220, 230))
-        ip_label = font.render("IP (voliteľné):", True, (220, 220, 230))
-        servers_label = font.render("Dostupné servery:", True, (220, 220, 230))
+        title = big_font.render("Agarta.io", True, (0, 0, 0))
+        name_label = font.render("Meno:", True, (0, 0, 0))
+        ip_label = font.render("IP (voliteľné):", True, (0, 0, 0))
+        servers_label = font.render("Dostupné servery:", True, (0, 0, 0))
 
-        name_rect = pygame.Rect(screen_w // 2 - 200, 220, 400, 40)
-        ip_rect = pygame.Rect(screen_w // 2 - 200, 290, 400, 40)
-        play_rect = pygame.Rect(screen_w // 2 + 20, screen_h - 120, 160, 50)
-        host_rect = pygame.Rect(screen_w // 2 - 180, screen_h - 120, 160, 50)
+        name_rect = pygame.Rect(screen_w // 2 - 220, 230, 440, 40)
+        ip_rect = pygame.Rect(screen_w // 2 - 220, 310, 440, 40)
+        play_rect = pygame.Rect(screen_w // 2 + 40, screen_h - 120, 180, 55)
+        host_rect = pygame.Rect(screen_w // 2 - 220, screen_h - 120, 180, 55)
         refresh_rect = pygame.Rect(screen_w - 200, 50, 150, 40)
+        quit_rect = pygame.Rect(20, 20, 140, 45)
 
-        server_list_y = 380
-        server_item_height = 55
+        server_list_y = 410
+        server_item_height = 60
         server_rects = []
         for i, srv in enumerate(servers):
             server_rects.append(pygame.Rect(screen_w // 2 - 200, server_list_y + i * server_item_height, 400, server_item_height - 5))
@@ -52,7 +56,9 @@ def start_screen():
             if e.type == pygame.QUIT:
                 return None, None
             if e.type == pygame.MOUSEBUTTONDOWN:
-                if refresh_rect.collidepoint(e.pos):
+                if quit_rect.collidepoint(e.pos):
+                    return None, None
+                elif refresh_rect.collidepoint(e.pos):
                     if not searching and current_time - last_search_time > 1.0:
                         threading.Thread(target=search_servers, daemon=True).start()
                         last_search_time = current_time
@@ -88,11 +94,11 @@ def start_screen():
                         elif active == "ip":
                             manual_ip += char
 
-        screen.fill((30, 35, 60))
+        screen.blit(bg_image, (0, 0))
 
-        screen.blit(title, (screen_w // 2 - title.get_width() // 2, 50))
+        screen.blit(title, (screen_w // 2 - title.get_width() // 2, 70))
 
-        screen.blit(name_label, (screen_w // 2 - 200, 185))
+        screen.blit(name_label, (screen_w // 2 - 220, 195))
         pygame.draw.rect(screen, (70, 80, 110), name_rect, border_radius=6)
         pygame.draw.rect(
             screen,
@@ -101,10 +107,10 @@ def start_screen():
             2,
             border_radius=6,
         )
-        name_surf = font.render(name or " ", True, (240, 240, 250))
+        name_surf = font.render(name or " ", True, (0, 0, 0))
         screen.blit(name_surf, (name_rect.x + 8, name_rect.y + 8))
 
-        screen.blit(ip_label, (screen_w // 2 - 200, 255))
+        screen.blit(ip_label, (screen_w // 2 - 220, 275))
         pygame.draw.rect(screen, (70, 80, 110), ip_rect, border_radius=6)
         pygame.draw.rect(
             screen,
@@ -113,16 +119,16 @@ def start_screen():
             2,
             border_radius=6,
         )
-        ip_surf = font.render(manual_ip or " ", True, (240, 240, 250))
+        ip_surf = font.render(manual_ip or " ", True, (0, 0, 0))
         screen.blit(ip_surf, (ip_rect.x + 8, ip_rect.y + 8))
 
-        screen.blit(servers_label, (screen_w // 2 - 200, 345))
+        screen.blit(servers_label, (screen_w // 2 - 220, 365))
 
         if searching:
-            search_text = small_font.render("Hľadám servery...", True, (150, 150, 200))
+            search_text = small_font.render("Hľadám servery...", True, (30, 30, 30))
             screen.blit(search_text, (screen_w // 2 - 200, server_list_y))
         elif not servers:
-            no_servers_text = small_font.render("Žiadne servery nenájdené", True, (150, 100, 100))
+            no_servers_text = small_font.render("Žiadne servery nenájdené", True, (30, 0, 0))
             screen.blit(no_servers_text, (screen_w // 2 - 200, server_list_y))
         else:
             for i, srv in enumerate(servers):
@@ -134,13 +140,23 @@ def start_screen():
                 pygame.draw.rect(screen, color, srv_rect, border_radius=6)
                 pygame.draw.rect(screen, border_color, srv_rect, 2, border_radius=6)
                 
-                ip_text = font.render(srv["ip"], True, (240, 240, 250))
-                players_text = small_font.render(f"{srv['players']} hráčov", True, (200, 200, 210))
+                ip_text = font.render(srv["ip"], True, (0, 0, 0))
+                players_text = small_font.render(f"{srv['players']} hráčov", True, (20, 20, 20))
                 screen.blit(ip_text, (srv_rect.x + 10, srv_rect.y + 8))
                 screen.blit(players_text, (srv_rect.x + 10, srv_rect.y + 30))
 
+        pygame.draw.rect(screen, (200, 80, 80), quit_rect, border_radius=6)
+        quit_text = font.render("Ukončiť", True, (0, 0, 0))
+        screen.blit(
+            quit_text,
+            (
+                quit_rect.x + (quit_rect.w - quit_text.get_width()) // 2,
+                quit_rect.y + (quit_rect.h - quit_text.get_height()) // 2,
+            ),
+        )
+
         pygame.draw.rect(screen, (80, 100, 130), refresh_rect, border_radius=6)
-        refresh_text = font.render("Obnoviť", True, (240, 240, 250))
+        refresh_text = font.render("Obnoviť", True, (0, 0, 0))
         screen.blit(refresh_text, (refresh_rect.x + (refresh_rect.w - refresh_text.get_width()) // 2, refresh_rect.y + 8))
 
         ready_play = bool(name.strip() and (selected_server or manual_ip.strip()))
@@ -152,7 +168,7 @@ def start_screen():
             host_rect,
             border_radius=8,
         )
-        host_text = font.render("Hostovať", True, (10, 15, 20))
+        host_text = font.render("Hostovať", True, (0, 0, 0))
         screen.blit(
             host_text,
             (
@@ -167,7 +183,7 @@ def start_screen():
             play_rect,
             border_radius=8,
         )
-        btn_text = font.render("Pripojiť", True, (10, 15, 20))
+        btn_text = font.render("Pripojiť", True, (0, 0, 0))
         screen.blit(
             btn_text,
             (
